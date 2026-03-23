@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Tanki Blitzers</title>
+  <!-- Firebase SDK — несколько CDN для надёжности -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script>
+  // Если gstatic не загрузился — грузим с jsdelivr
+  if (typeof firebase === 'undefined') {
+    var s1 = document.createElement('script');
+    s1.src = 'https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.min.js';
+    s1.onload = function() {
+      var s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-database-compat.min.js';
+      s2.onload = function() {
+        var s3 = document.createElement('script');
+        s3.src = 'https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.min.js';
+        document.head.appendChild(s3);
+      };
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s1);
+  }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Exo+2:wght@400;600&display=swap');
+    :root {
+      --bg-dark:    #0a0d14;
+      --bg-mid:     #111827;
+      --accent:     #f4a01c;
+      --steel:      #4a5568;
+      --steel-lite: #718096;
+      --text:       #e2e8f0;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+    body { font-family: 'Exo 2', sans-serif; background: var(--bg-dark); color: var(--text); display: flex; align-items: center; justify-content: center; }
+    .bg { position: fixed; inset: 0; background: radial-gradient(ellipse 60% 40% at 50% -10%, #1a2a4a 0%, transparent 70%), radial-gradient(ellipse 80% 50% at 50% 110%, #1a1000 0%, transparent 70%), var(--bg-dark); z-index: 0; }
+    .bg::after { content: ''; position: absolute; inset: 0; background-image: linear-gradient(rgba(244,160,28,.04) 1px, transparent 1px), linear-gradient(90deg, rgba(244,160,28,.04) 1px, transparent 1px); background-size: 48px 48px; mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, black 30%, transparent 100%); }
+    .glow { position: fixed; width: 600px; height: 600px; border-radius: 50%; background: radial-gradient(circle, rgba(244,160,28,.07) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%,-50%); animation: pulse 4s ease-in-out infinite; z-index: 0; }
+    @keyframes pulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity:.6; } 50% { transform: translate(-50%,-50%) scale(1.2); opacity:1; } }
+    #rotate-screen { display: none; position: fixed; inset: 0; z-index: 100; background: var(--bg-dark); flex-direction: column; align-items: center; justify-content: center; gap: 20px; text-align: center; padding: 24px; }
+    .rotate-icon { font-size: 3.5rem; animation: rotateAnim 2s ease-in-out infinite; }
+    @keyframes rotateAnim { 0%,100% { transform: rotate(0deg); } 50% { transform: rotate(90deg); } }
+    .rotate-text { font-size: 1rem; font-weight: 600; letter-spacing: .08em; color: var(--steel-lite); line-height: 1.6; }
+    @media (orientation: portrait) { #rotate-screen { display: flex; } }
+    #splash { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; transition: opacity .5s ease; }
+    #splash.hidden { opacity: 0; pointer-events: none; }
+    .splash-icon { font-size: 3rem; animation: pulse 2s ease-in-out infinite; }
+    .splash-text { font-size: clamp(.9rem, 3vw, 1.2rem); font-weight: 600; letter-spacing: .06em; text-align: center; color: var(--text); line-height: 1.7; max-width: 480px; padding: 0 24px; }
+    .splash-text strong { color: var(--accent); }
+    .btn-fullscreen { padding: 18px 48px; font-family: 'Exo 2', sans-serif; font-size: clamp(1rem, 3vw, 1.15rem); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--bg-dark); background: var(--accent); border: none; cursor: pointer; outline: none; clip-path: polygon(14px 0%, calc(100% - 14px) 0%, 100% 14px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 14px 100%, 0% calc(100% - 14px), 0% 14px); transition: transform .15s, background .15s; -webkit-tap-highlight-color: transparent; }
+    .btn-fullscreen:active, .btn-fullscreen:hover { background: #ffd05a; transform: scale(.96); }
+
+    /* ─── AUTH SCREEN ─── */
+    #auth-screen { position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; opacity: 0; pointer-events: none; transition: opacity .4s ease; }
+    #auth-screen.visible { opacity: 1; pointer-events: auto; }
+    .auth-card { width: min(90vw, 360px); background: rgba(17,24,39,.9); border: 1.5px solid rgba(74,85,104,.4); clip-path: polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px); padding: 28px 24px; display: flex; flex-direction: column; gap: 16px; }
+    .auth-title { font-family: 'Russo One', sans-serif; font-size: 1.2rem; letter-spacing: .1em; color: var(--accent); text-align: center; }
+    .auth-sub { font-family: 'Exo 2', sans-serif; font-size: .78rem; color: var(--steel-lite); text-align: center; letter-spacing: .06em; line-height: 1.5; }
+    .auth-input { width: 100%; padding: 12px 16px; font-family: 'Exo 2', sans-serif; font-size: .9rem; color: var(--text); background: rgba(74,85,104,.15); border: 1.5px solid rgba(74,85,104,.4); border-radius: 4px; outline: none; transition: border-color .2s; }
+    .auth-input:focus { border-color: var(--accent); }
+    .auth-input::placeholder { color: var(--steel); }
+    .auth-divider { display: flex; align-items: center; gap: 10px; }
+    .auth-divider-line { flex: 1; height: 1px; background: rgba(74,85,104,.35); }
+    .auth-divider-text { font-size: .65rem; letter-spacing: .2em; color: var(--steel); }
+    .auth-error { font-family: 'Exo 2', sans-serif; font-size: .75rem; color: #fc8181; letter-spacing: .05em; text-align: center; min-height: 1rem; }
+    .btn-auth { position: relative; width: 100%; padding: 13px 20px; font-family: 'Exo 2', sans-serif; font-size: .88rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--bg-dark); background: var(--accent); border: none; cursor: pointer; outline: none; clip-path: polygon(10px 0%,calc(100% - 10px) 0%,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0% calc(100% - 10px),0% 10px); transition: background .15s, transform .15s; -webkit-tap-highlight-color: transparent; }
+    .btn-auth:active { background: #ffd05a; transform: scale(.97); }
+    .btn-auth.secondary { background: transparent; color: var(--steel-lite); border: 1.5px solid rgba(74,85,104,.4); clip-path: polygon(10px 0%,calc(100% - 10px) 0%,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0% calc(100% - 10px),0% 10px); }
+    .btn-auth.secondary:active { background: rgba(74,85,104,.2); color: var(--text); }
+    .btn-auth:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    #menu { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; opacity: 0; pointer-events: none; transition: opacity .5s .3s ease; width: 100%; padding: 0 16px; box-sizing: border-box; }
+    #menu.visible { opacity: 1; pointer-events: auto; }
+    .title-wrap { text-align: center; }
+    .title-sub { font-size: clamp(.55rem, 1.8vw, .75rem); font-weight: 600; letter-spacing: .35em; text-transform: uppercase; color: var(--accent); opacity: .8; margin-bottom: 4px; }
+    .title { font-family: 'Russo One', sans-serif; font-size: clamp(1.6rem, 5vw, 4.5rem); line-height: 1; letter-spacing: .04em; text-transform: uppercase; background: linear-gradient(160deg, #fff8e7 0%, var(--accent) 40%, #ffd370 60%, #c47e10 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; filter: drop-shadow(0 0 24px rgba(244,160,28,.4)); animation: titleIn .8s cubic-bezier(.22,1,.36,1) both; }
+    @keyframes titleIn { from { opacity:0; transform:translateY(-16px); } to { opacity:1; transform:translateY(0); } }
+    .title-line { margin: 8px auto 0; width: 140px; height: 2px; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+    .ingot-balance { display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; background:rgba(244,160,28,.08); border:1.5px solid rgba(244,160,28,.25); padding:5px 16px; clip-path:polygon(10px 0%,calc(100% - 10px) 0%,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0% calc(100% - 10px),0% 10px); }
+    .ingot-balance .ib-icon  { font-size:1rem; line-height:1; }
+    .ingot-balance .ib-label { font-family:'Exo 2',sans-serif; font-size:.65rem; font-weight:600; letter-spacing:.22em; text-transform:uppercase; color:rgba(244,160,28,.7); }
+    .ingot-balance .ib-value { font-family:'Russo One',sans-serif; font-size:.95rem; color:var(--accent); letter-spacing:.05em; }
+    .user-badge { display:flex; align-items:center; gap:6px; font-family:'Exo 2',sans-serif; font-size:.65rem; color:var(--steel-lite); letter-spacing:.08em; margin-top:4px; justify-content:center; }
+    .user-badge span { color:var(--text); font-weight:600; }
+
+    /* ── Горизонтальный режим меню ── */
+    @media (max-height: 480px) {
+      #menu { flex-direction: row; align-items: center; justify-content: center; gap: 16px; padding: 0 12px; }
+      .title-wrap { flex-shrink: 0; }
+      .title { font-size: clamp(1.2rem, 3.5vw, 2rem); }
+      .title-line { display: none; }
+      .ingot-balance { margin-top: 4px; padding: 3px 10px; }
+      .user-badge { margin-top: 2px; }
+      .btn-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex-shrink: 0; }
+      .btn { min-width: 0; width: 100%; padding: 10px 16px; font-size: clamp(.7rem, 1.8vw, .82rem); }
+    }
+
+    /* ─── МУЛЬТИПЛЕЕР ─── */
+    #mp-screen { position:fixed; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; opacity:0; pointer-events:none; transition:opacity .35s ease; }
+    #mp-screen.visible { opacity:1; pointer-events:auto; }
+    .mp-card { width:min(92vw,400px); background:rgba(17,24,39,.88); border:1.5px solid rgba(74,85,104,.4); clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0% calc(100% - 12px),0% 12px); padding:20px 22px; display:flex; flex-direction:column; gap:12px; }
+    .mp-row { display:flex; justify-content:space-between; align-items:center; font-family:'Exo 2',sans-serif; font-size:.82rem; letter-spacing:.06em; border-bottom:1px solid rgba(74,85,104,.2); padding-bottom:10px; }
+    .mp-row:last-child { border-bottom:none; padding-bottom:0; }
+    .mp-row-key { color:var(--steel-lite); }
+    .mp-row-val { color:var(--text); font-weight:600; }
+
+    /* Список игроков */
+    .mp-players-list { display:flex; flex-direction:column; gap:6px; max-height:130px; overflow-y:auto; }
+    .mp-player-item { display:flex; justify-content:space-between; align-items:center; font-family:'Exo 2',sans-serif; font-size:.78rem; padding:7px 12px; background:rgba(74,85,104,.12); border-radius:3px; cursor:pointer; border:1.5px solid transparent; transition:background .15s, border-color .15s; -webkit-tap-highlight-color:transparent; }
+    .mp-player-item:active, .mp-player-item:hover { background:rgba(244,160,28,.1); border-color:rgba(244,160,28,.35); }
+    .mp-player-name { color:var(--text); letter-spacing:.05em; }
+    .mp-player-ingots { color:var(--accent); font-size:.7rem; }
+    .mp-player-btn { font-size:.6rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; background:rgba(244,160,28,.2); color:var(--accent); border:1px solid rgba(244,160,28,.4); padding:2px 8px; border-radius:2px; }
+    .mp-empty-msg { font-family:'Exo 2',sans-serif; font-size:.75rem; color:var(--steel); text-align:center; letter-spacing:.1em; padding:10px 0; }
+
+    /* Матчмейкинг оверлей */
+    #matchmaking-overlay { position:fixed; inset:0; z-index:15; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; background:rgba(10,13,20,.92); opacity:0; pointer-events:none; transition:opacity .3s; }
+    #matchmaking-overlay.visible { opacity:1; pointer-events:auto; }
+    .mm-title { font-family:'Russo One',sans-serif; font-size:clamp(1.2rem,4vw,1.8rem); letter-spacing:.08em; color:var(--accent); }
+    .mm-spinner { width:64px; height:64px; border:4px solid rgba(244,160,28,.2); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .mm-status { font-family:'Exo 2',sans-serif; font-size:.85rem; color:var(--steel-lite); letter-spacing:.08em; text-align:center; }
+    .mm-timer { font-family:'Russo One',sans-serif; font-size:2rem; color:var(--text); }
+    .mm-found { font-family:'Russo One',sans-serif; font-size:1.1rem; color:#48bb78; letter-spacing:.1em; }
+
+    /* Запрос на бой */
+    #battle-request { position:fixed; inset:0; z-index:16; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.7); opacity:0; pointer-events:none; transition:opacity .3s; }
+    #battle-request.visible { opacity:1; pointer-events:auto; }
+    .br-card { width:min(88vw,320px); background:var(--bg-mid); border:1.5px solid rgba(244,160,28,.4); clip-path:polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px); padding:24px 20px; display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; }
+    .br-icon { font-size:2.5rem; }
+    .br-title { font-family:'Russo One',sans-serif; font-size:1rem; letter-spacing:.1em; color:var(--accent); }
+    .br-from  { font-family:'Exo 2',sans-serif; font-size:.82rem; color:var(--text); letter-spacing:.06em; }
+    .br-btns  { display:flex; gap:10px; width:100%; }
+    .br-btn   { flex:1; padding:10px; font-family:'Exo 2',sans-serif; font-size:.8rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; border:none; cursor:pointer; clip-path:polygon(8px 0%,calc(100% - 8px) 0%,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0% calc(100% - 8px),0% 8px); transition:transform .15s; -webkit-tap-highlight-color:transparent; }
+    .br-btn.accept { background:var(--accent); color:var(--bg-dark); }
+    .br-btn.decline { background:rgba(74,85,104,.4); color:var(--text); }
+    .br-btn:active { transform:scale(.96); }
+
+    .btn-list { display: flex; flex-direction: column; gap: 14px; }
+    .btn { position: relative; min-width: clamp(220px, 40vw, 280px); padding: 14px 36px; font-family: 'Exo 2', sans-serif; font-size: clamp(.85rem, 2.5vw, 1rem); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--text); background: transparent; border: none; cursor: pointer; outline: none; -webkit-tap-highlight-color: transparent; transition: color .2s, transform .15s; clip-path: polygon(12px 0%, calc(100% - 12px) 0%, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0% calc(100% - 12px), 0% 12px); }
+    .btn::before { content: ''; position: absolute; inset: 0; background: rgba(74,85,104,.25); border: 1.5px solid rgba(74,85,104,.5); clip-path: inherit; transition: background .2s, border-color .2s; }
+    .btn::after  { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(244,160,28,.15), rgba(244,160,28,.05)); clip-path: inherit; opacity: 0; transition: opacity .2s; }
+    .btn:active, .btn:hover { color: var(--accent); transform: scale(.97); }
+    .btn:active::before, .btn:hover::before { background: rgba(244,160,28,.12); border-color: var(--accent); }
+    .btn:active::after,  .btn:hover::after  { opacity: 1; }
+    .btn span { position: relative; z-index: 1; }
+    .toast { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-mid); border: 1.5px solid var(--steel); padding: 12px 28px; font-size: clamp(.8rem, 2.5vw, .9rem); letter-spacing: .08em; color: var(--steel-lite); clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0% calc(100% - 8px), 0% 8px); opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 99; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast-icon { margin-right: 8px; color: var(--accent); }
+    .version { position: fixed; bottom: 10px; right: 16px; font-size: .6rem; letter-spacing: .15em; color: var(--steel); z-index: 1; }
+    #currency-bar { position: absolute; top: 14px; right: 20px; display: flex; align-items: center; gap: 7px; background: rgba(244,160,28,.1); border: 1.5px solid rgba(244,160,28,.3); padding: 5px 14px 5px 10px; clip-path: polygon(8px 0%, calc(100% - 8px) 0%, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0% calc(100% - 8px), 0% 8px); pointer-events: none; }
+    #currency-bar .cur-icon  { font-size: 1rem; line-height: 1; }
+    #currency-bar .cur-label { font-family: 'Exo 2', sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: rgba(244,160,28,.7); }
+    #currency-bar .cur-value { font-family: 'Russo One', sans-serif; font-size: .85rem; color: var(--accent); letter-spacing: .04em; }
+    .secondary-screen { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+    .secondary-screen.visible { opacity: 1; pointer-events: auto; }
+    .screen-title { font-family: 'Russo One', sans-serif; font-size: clamp(1.4rem, 4vw, 2.2rem); letter-spacing: .08em; text-transform: uppercase; color: var(--text); filter: drop-shadow(0 0 12px rgba(244,160,28,.25)); }
+    .btn-back { position: relative; padding: 10px 30px; font-family: 'Exo 2', sans-serif; font-size: clamp(.75rem, 2vw, .85rem); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--steel-lite); background: transparent; border: none; cursor: pointer; outline: none; -webkit-tap-highlight-color: transparent; transition: color .2s, transform .15s; clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0% calc(100% - 10px), 0% 10px); }
+    .btn-back::before { content: ''; position: absolute; inset: 0; background: rgba(74,85,104,.15); border: 1.5px solid rgba(74,85,104,.3); clip-path: inherit; transition: background .2s, border-color .2s; }
+    .btn-back:active, .btn-back:hover { color: var(--text); transform: scale(.97); }
+    .btn-back:active::before, .btn-back:hover::before { background: rgba(74,85,104,.3); border-color: var(--steel-lite); }
+    .btn-back span { position: relative; z-index: 1; }
+    #mode-screen { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px; opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+    #mode-screen.visible { opacity: 1; pointer-events: auto; }
+    .mode-title { font-family: 'Russo One', sans-serif; font-size: clamp(1.4rem, 4vw, 2.2rem); letter-spacing: .08em; text-transform: uppercase; color: var(--text); filter: drop-shadow(0 0 12px rgba(244,160,28,.25)); }
+    .mode-btn-row { display: flex; flex-direction: row; gap: 20px; flex-wrap: wrap; justify-content: center; }
+    .inv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(96vw, 440px); padding: 0 4px; }
+    @media (max-height: 420px) { .inv-grid { grid-template-columns: repeat(6, 1fr); gap: 7px; } }
+    .inv-slot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; aspect-ratio: 1 / 1.05; padding: 8px 6px; clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0% calc(100% - 10px), 0% 10px); }
+    .inv-slot.filled { background: rgba(244,160,28,.09); border: 1.5px solid rgba(244,160,28,.35); }
+    .inv-slot.empty  { background: rgba(74,85,104,.10);  border: 1.5px solid rgba(74,85,104,.22); }
+    .inv-slot-icon { font-size: clamp(1.5rem, 5vw, 2.2rem); line-height: 1; }
+    .inv-slot-name { font-family: 'Russo One', sans-serif; font-size: clamp(.55rem, 1.8vw, .75rem); letter-spacing: .1em; color: var(--accent); text-align: center; }
+    .inv-slot-badge { font-family: 'Exo 2', sans-serif; font-size: clamp(.45rem, 1.5vw, .6rem); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--bg-dark); background: var(--accent); padding: 2px 8px; border-radius: 2px; }
+    .inv-slot-empty-lbl { font-family: 'Exo 2', sans-serif; font-size: clamp(.5rem, 1.6vw, .65rem); letter-spacing: .14em; text-transform: uppercase; color: var(--steel); opacity: .6; }
+    .shop-section-label { font-family: 'Exo 2', sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: .3em; text-transform: uppercase; color: var(--steel-lite); }
+    .shop-scroll { display: flex; flex-direction: row; gap: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px 16px 8px; max-width: min(98vw, 520px); scrollbar-width: none; }
+    .shop-scroll::-webkit-scrollbar { display: none; }
+    .shop-tank-card { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 10px; width: clamp(120px, 32vw, 155px); padding: 16px 10px 14px; cursor: pointer; background: rgba(74,85,104,.12); border: 1.5px solid rgba(74,85,104,.3); clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0% calc(100% - 10px), 0% 10px); transition: background .2s, border-color .2s, transform .15s; -webkit-tap-highlight-color: transparent; }
+    .shop-tank-card:active, .shop-tank-card:hover { background: rgba(244,160,28,.1); border-color: rgba(244,160,28,.45); transform: scale(.97); }
+    .stc-icon  { font-size: clamp(1.8rem, 5vw, 2.4rem); line-height: 1; }
+    .stc-name  { font-family: 'Russo One', sans-serif; font-size: clamp(.65rem, 2vw, .85rem); letter-spacing: .12em; color: var(--accent); }
+    .stc-badge { font-family: 'Exo 2', sans-serif; font-size: .58rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--steel-lite); background: rgba(74,85,104,.3); padding: 2px 10px; border-radius: 2px; white-space: nowrap; }
+    .stc-price { font-family: 'Russo One', sans-serif; font-size: .78rem; color: var(--accent); letter-spacing: .06em; }
+    #tank-modal { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.65); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+    #tank-modal.visible { opacity: 1; pointer-events: auto; }
+    .modal-box { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; width: min(88vw, 320px); padding: 28px 24px 22px; background: var(--bg-mid); clip-path: polygon(16px 0%, calc(100% - 16px) 0%, 100% 16px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 16px 100%, 0% calc(100% - 16px), 0% 16px); border: 1.5px solid rgba(244,160,28,.3); }
+    .modal-icon { font-size: 3rem; line-height: 1; }
+    .modal-name { font-family: 'Russo One', sans-serif; font-size: 1.3rem; letter-spacing: .12em; color: var(--accent); }
+    .modal-stats { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+    .modal-stat-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(74,85,104,.25); padding-bottom: 5px; font-family: 'Exo 2', sans-serif; font-size: .82rem; letter-spacing: .05em; }
+    .modal-stat-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .modal-stat-key { color: var(--steel-lite); }
+    .modal-stat-val { color: var(--text); font-weight: 600; }
+    .modal-footer { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .modal-owned-msg { font-family: 'Exo 2', sans-serif; font-size: .75rem; color: #48bb78; letter-spacing: .08em; text-align: center; background: rgba(72,187,120,.1); padding: 8px 16px; border-radius: 3px; width: 100%; }
+    .modal-price-row { display: flex; align-items: center; gap: 8px; font-family: 'Exo 2', sans-serif; font-size: .82rem; color: var(--steel-lite); }
+    .modal-price-val { font-family: 'Russo One', sans-serif; font-size: 1rem; color: var(--accent); }
+    .btn-buy { position: relative; width: 100%; padding: 11px 20px; font-family: 'Exo 2', sans-serif; font-size: .85rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--bg-dark); background: var(--accent); border: none; cursor: pointer; outline: none; clip-path: polygon(10px 0%, calc(100% - 10px) 0%, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0% calc(100% - 10px), 0% 10px); transition: background .15s, transform .15s; -webkit-tap-highlight-color: transparent; }
+    .btn-buy:active, .btn-buy:hover { background: #ffd05a; transform: scale(.97); }
+    .btn-buy:disabled { background: rgba(74,85,104,.4); color: rgba(255,255,255,.3); cursor: not-allowed; transform: none; }
+    #game-screen { position: fixed; inset: 0; z-index: 6; display: none; background: #0d1117; }
+    #game-canvas  { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #hud { position: absolute; top: 10px; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 0 16px; pointer-events: none; z-index: 2; }
+    .hud-block { display: flex; flex-direction: column; gap: 3px; }
+    .hud-label { font-family: 'Russo One', sans-serif; font-size: .65rem; letter-spacing: .12em; color: rgba(255,255,255,.6); }
+    .hud-name  { font-family: 'Russo One', sans-serif; font-size: .8rem;  letter-spacing: .1em;  color: #e2e8f0; }
+    .hp-bar-wrap { width: 120px; height: 8px; background: rgba(255,255,255,.1); border-radius: 4px; overflow: hidden; }
+    .hp-bar { height: 100%; border-radius: 4px; transition: width .2s; }
+    .hp-bar.player { background: #48bb78; }
+    .hp-bar.enemy  { background: #e53e3e; }
+    .hud-hp-text { font-size: .65rem; color: rgba(255,255,255,.5); font-family: 'Exo 2', sans-serif; }
+    #hud-center { position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:2px; pointer-events:none; z-index:2; }
+    .hud-mode-badge { font-family:'Exo 2',sans-serif; font-size:.6rem; font-weight:600; letter-spacing:.18em; text-transform:uppercase; color:rgba(255,255,255,.5); background:rgba(255,255,255,.07); padding:2px 10px; border-radius:2px; }
+    #btn-exit-game { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); padding: 6px 18px; font-family: 'Exo 2', sans-serif; font-size: .7rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.5); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); border-radius: 4px; cursor: pointer; outline: none; z-index: 3; -webkit-tap-highlight-color: transparent; }
+    #btn-exit-game:active { background: rgba(255,255,255,.12); }
+    #joystick-zone { position: absolute; left: 20px; bottom: 20px; width: 120px; height: 120px; z-index: 3; }
+    #joystick-base { position: absolute; inset: 0; border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.15); }
+    #joystick-knob { position: absolute; width: 48px; height: 48px; border-radius: 50%; background: rgba(244,160,28,.7); border: 2px solid rgba(244,160,28,.9); top: 50%; left: 50%; transform: translate(-50%,-50%); }
+    #btn-fire { position: absolute; right: 30px; bottom: 30px; width: 80px; height: 80px; border-radius: 50%; background: rgba(229,62,62,.75); border: 3px solid rgba(229,62,62,.9); font-family: 'Russo One', sans-serif; font-size: .75rem; letter-spacing: .06em; color: #fff; cursor: pointer; outline: none; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; -webkit-tap-highlight-color: transparent; transition: background .1s, transform .1s; }
+    #btn-fire:active, #btn-fire.active  { background: rgba(229,62,62,1); transform: scale(.93); }
+    #btn-fire.cooldown { background: rgba(100,100,100,.5); border-color: rgba(100,100,100,.7); }
+    #fire-icon  { font-size: 1.4rem; line-height: 1; }
+    #fire-label { font-size: .55rem; letter-spacing: .08em; opacity: .8; }
+    #game-over { display: none; position: absolute; inset: 0; z-index: 10; background: rgba(0,0,0,.75); flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+    #game-over.show { display: flex; }
+    .game-over-title { font-family: 'Russo One', sans-serif; font-size: clamp(1.8rem, 5vw, 3rem); letter-spacing: .08em; text-transform: uppercase; }
+    .game-over-title.win  { color: #48bb78; filter: drop-shadow(0 0 16px #48bb78); }
+    .game-over-title.lose { color: #e53e3e; filter: drop-shadow(0 0 16px #e53e3e); }
+    .game-over-sub { font-family: 'Exo 2', sans-serif; font-size: .9rem; color: rgba(255,255,255,.6); letter-spacing: .08em; text-align: center; padding: 0 20px; }
+  </style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="glow"></div>
+
+<div id="rotate-screen">
+  <div class="rotate-icon">📱</div>
+  <p class="rotate-text">Поверните устройство<br>в <strong style="color:var(--accent)">горизонтальное</strong> положение</p>
+</div>
+
+<div id="splash">
+  <div class="splash-icon">⚠️</div>
+  <p class="splash-text">Нажмите на кнопку<br><strong>«Полноэкранный режим»</strong>.<br>Это очень важно!</p>
+  <button class="btn-fullscreen" ontouchend="enterFullscreen(event)" onclick="enterFullscreen(event)">⛶ Полноэкранный режим</button>
+</div>
+
+<!-- ─── ЭКРАН НИКА ─── -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-title">🪖 Tanki Blitzers</div>
+    <div class="auth-sub">Введите ник — и сразу в бой!</div>
+    <input class="auth-input" id="auth-nick" type="text" placeholder="Ваш ник (от 3 символов)" autocomplete="username" maxlength="20" />
+    <div class="auth-error" id="auth-error"></div>
+    <button class="btn-auth" id="btn-login" ontouchend="doEnterGame(event)" onclick="doEnterGame(event)">⚡ Войти в игру</button>
+  </div>
+</div>
+
+<!-- ─── ЭКРАН ПРОФИЛЯ (смена ника) ─── -->
+<div id="profile-screen" class="secondary-screen">
+  <p class="screen-title">👤 Профиль</p>
+  <div class="auth-card" style="width:min(88vw,340px)">
+    <div class="auth-sub" id="profile-current-nick" style="color:var(--accent);font-size:.9rem;letter-spacing:.08em"></div>
+    <input class="auth-input" id="profile-nick-input" type="text" placeholder="Новый ник (от 3 символов)" maxlength="20" />
+    <div class="auth-error" id="profile-nick-error"></div>
+    <button class="btn-auth" ontouchend="doChangeNick(event)" onclick="doChangeNick(event)">✅ Сохранить ник</button>
+  </div>
+  <button class="btn-back" ontouchend="closeSecondary('profile-screen',event)" onclick="closeSecondary('profile-screen',event)"><span>← Назад</span></button>
+</div>
+
+<!-- ─── МЕНЮ ─── -->
+<main id="menu">
+  <div id="currency-bar">
+    <span class="cur-icon">🪙</span>
+    <span class="cur-label">Слитки</span>
+    <span class="cur-value" id="currency-value">0</span>
+  </div>
+  <div class="title-wrap">
+    <p class="title-sub">2D Tank Battle</p>
+    <h1 class="title">Tanki Blitzers</h1>
+    <div class="title-line"></div>
+    <div class="ingot-balance">
+      <span class="ib-icon">🪙</span>
+      <span class="ib-label">Слитки</span>
+      <span class="ib-value" id="ingot-title-val">0</span>
+    </div>
+    <div class="user-badge" id="user-badge">👤 <span id="user-badge-name">Гость</span></div>
+  </div>
+  <nav class="btn-list">
+    <button class="btn" ontouchend="openModeScreen(event)"      onclick="openModeScreen(event)"><span>⚔ Выбрать режим</span></button>
+    <button class="btn" ontouchend="openInventoryScreen(event)" onclick="openInventoryScreen(event)"><span>🎒 Инвентарь</span></button>
+    <button class="btn" ontouchend="openShopScreen(event)"      onclick="openShopScreen(event)"><span>🏪 Магазин</span></button>
+    <button class="btn" ontouchend="openProfileScreen(event)"   onclick="openProfileScreen(event)"><span>👤 Профиль</span></button>
+  </nav>
+</main>
+
+<!-- ─── ВЫБОР РЕЖИМА ─── -->
+<div id="mode-screen">
+  <p class="mode-title">⚔ Выбор режима</p>
+  <div class="mode-btn-row">
+    <button class="btn" ontouchend="openMpScreen(event)" onclick="openMpScreen(event)"><span>🌐 Мультиплеер</span></button>
+    <button class="btn" ontouchend="startVsAI(event)"    onclick="startVsAI(event)"><span>🤖 Против ИИ</span></button>
+  </div>
+  <button class="btn-back" ontouchend="closeModeScreen(event)" onclick="closeModeScreen(event)"><span>← Назад</span></button>
+</div>
+
+<!-- ─── МУЛЬТИПЛЕЕР ─── -->
+<div id="mp-screen">
+  <p class="mode-title">🌐 Мультиплеер</p>
+  <div class="mp-card">
+    <div class="mp-row">
+      <span class="mp-row-key">Firebase</span>
+      <span class="mp-row-val" id="mp-status">⏳ Подключение...</span>
+    </div>
+    <div class="mp-row">
+      <span class="mp-row-key">Ваш ID</span>
+      <span class="mp-row-val" id="mp-my-id">—</span>
+    </div>
+    <div class="mp-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+      <span class="mp-row-key">Игроки онлайн</span>
+      <div class="mp-players-list" id="mp-players-list">
+        <div class="mp-empty-msg">Загрузка...</div>
+      </div>
+    </div>
+  </div>
+  <button class="btn" ontouchend="startMatchmaking(event)" onclick="startMatchmaking(event)"><span>🔍 Случайный соперник</span></button>
+  <button class="btn-back" ontouchend="closeMpScreen(event)" onclick="closeMpScreen(event)"><span>← Назад</span></button>
+</div>
+
+<!-- ─── ИНВЕНТАРЬ ─── -->
+<div id="inventory-screen" class="secondary-screen">
+  <p class="screen-title">🎒 Инвентарь</p>
+  <div class="inv-grid" id="inv-grid"></div>
+  <button class="btn-back" ontouchend="closeSecondary('inventory-screen',event)" onclick="closeSecondary('inventory-screen',event)"><span>← Назад</span></button>
+</div>
+
+<!-- ─── МАГАЗИН ─── -->
+<div id="shop-screen" class="secondary-screen">
+  <p class="screen-title">🏪 Магазин</p>
+  <div class="shop-section-label">Танки</div>
+  <div class="shop-scroll" id="shop-scroll"></div>
+  <button class="btn-back" ontouchend="closeSecondary('shop-screen',event)" onclick="closeSecondary('shop-screen',event)"><span>← Назад</span></button>
+</div>
+
+<!-- ─── МОДАЛКА ─── -->
+<div id="tank-modal">
+  <div class="modal-box">
+    <div class="modal-icon" id="modal-icon">🪖</div>
+    <div class="modal-name" id="modal-name">SHELLY</div>
+    <div class="modal-stats"  id="modal-stats"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+    <button class="btn-back" style="margin-top:4px" ontouchend="closeTankModal(event)" onclick="closeTankModal(event)"><span>← Закрыть</span></button>
+  </div>
+</div>
+
+<!-- ─── ГЕЙМПЛЕЙ ─── -->
+<div id="game-screen">
+  <canvas id="game-canvas"></canvas>
+  <div id="hud">
+    <div class="hud-block">
+      <div class="hud-label">ВЫ</div>
+      <div class="hud-name" id="player-hud-name">SHELLY</div>
+      <div class="hp-bar-wrap"><div class="hp-bar player" id="player-hp-bar"></div></div>
+      <div class="hud-hp-text" id="player-hp-text">400 / 400</div>
+    </div>
+    <div id="hud-center">
+      <div class="hud-mode-badge" id="hud-mode-label">ИИ</div>
+    </div>
+    <div class="hud-block" style="align-items:flex-end">
+      <div class="hud-label">ВРАГ</div>
+      <div class="hud-name" id="enemy-hud-name">ENEMY</div>
+      <div class="hp-bar-wrap"><div class="hp-bar enemy" id="enemy-hp-bar"></div></div>
+      <div class="hud-hp-text" id="enemy-hp-text">400 / 400</div>
+    </div>
+  </div>
+  <button id="btn-exit-game" ontouchend="exitGame(event)" onclick="exitGame(event)">✕ Меню</button>
+  <div id="joystick-zone">
+    <div id="joystick-base"></div>
+    <div id="joystick-knob"></div>
+  </div>
+  <button id="btn-fire"
+    ontouchstart="fireButtonDown(event)" ontouchend="fireButtonUp(event)"
+    onmousedown="fireButtonDown(event)"  onmouseup="fireButtonUp(event)">
+    <span id="fire-icon">🔥</span>
+    <span id="fire-label">ОГОНЬ</span>
+  </button>
+  <div id="game-over">
+    <div class="game-over-title" id="game-over-title">ПОБЕДА</div>
+    <div class="game-over-sub"   id="game-over-sub">Враг уничтожен</div>
+    <button class="btn-fullscreen" style="font-size:.85rem;padding:14px 36px" ontouchend="exitGame(event)" onclick="exitGame(event)">В главное меню</button>
+  </div>
+</div>
+
+<!-- ─── МАТЧМЕЙКИНГ ОВЕРЛЕЙ ─── -->
+<div id="matchmaking-overlay">
+  <div class="mm-title">🔍 Поиск соперника</div>
+  <div class="mm-spinner"></div>
+  <div class="mm-timer" id="mm-timer">20</div>
+  <div class="mm-status" id="mm-status">Ищем игрока в сети...</div>
+  <button class="btn-back" ontouchend="cancelMatchmaking(event)" onclick="cancelMatchmaking(event)"><span>✕ Отмена</span></button>
+</div>
+
+<!-- ─── ЗАПРОС НА БОЙ ─── -->
+<div id="battle-request">
+  <div class="br-card">
+    <div class="br-icon">⚔️</div>
+    <div class="br-title">ЗАПРОС НА БОЙ</div>
+    <div class="br-from" id="br-from-text">Игрок хочет сразиться с вами</div>
+    <div class="br-btns">
+      <button class="br-btn accept" ontouchend="acceptBattleRequest(event)" onclick="acceptBattleRequest(event)">✅ Принять</button>
+      <button class="br-btn decline" ontouchend="declineBattleRequest(event)" onclick="declineBattleRequest(event)">❌ Отклонить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toast-icon">🔧</span><span id="toast-msg">В разработке</span>
+</div>
+<div class="version">v1.3.0 — Online · Nickname Only</div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   СОСТОЯНИЕ ИГРОКА
+═══════════════════════════════════════════════════ */
+let playerCurrency = 0;
+let ownedTanks     = ['shelly'];
+let currentUser    = null;   // { uid, nick }
+let myPlayerId     = null;
+let playerNick     = null;
+
+const TANK_DATA = {
+  shelly: {
+    icon:'🪖', name:'SHELLY', price:null,
+    stats:[{key:'HP',val:'400'},{key:'Урон',val:'60'},{key:'Тип атаки',val:'1 пуля'},{key:'Перезарядка',val:'2 сек'}],
+  },
+  nita: {
+    icon:'🐻', name:'NITA', price:250,
+    stats:[{key:'HP',val:'700'},{key:'Урон',val:'78'},{key:'Тип атаки',val:'2 пули'},{key:'Перезарядка',val:'4 сек'}],
+  },
+};
+
+function refreshCurrency() {
+  document.getElementById('currency-value').textContent   = playerCurrency;
+  var t = document.getElementById('ingot-title-val');
+  if (t) t.textContent = playerCurrency;
+  if (window.fbDb && myPlayerId) {
+    window.fbDb.ref('players/' + myPlayerId + '/ingots').set(playerCurrency);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   ТОСТ
+═══════════════════════════════════════════════════ */
+let toastTimer = null;
+function showToast(event, type, msg) {
+  if (event) event.preventDefault();
+  const icon = document.getElementById('toast-icon');
+  const text = document.getElementById('toast-msg');
+  if      (type==='buy')   { icon.textContent='✅'; text.textContent=msg||'Куплено!'; }
+  else if (type==='poor')  { icon.textContent='💸'; text.textContent='Недостаточно слитков!'; }
+  else if (type==='info')  { icon.textContent='ℹ️'; text.textContent=msg||''; }
+  else if (type==='error') { icon.textContent='❌'; text.textContent=msg||'Ошибка'; }
+  else                     { icon.textContent='🔧'; text.textContent='В разработке'; }
+  const toast=document.getElementById('toast');
+  clearTimeout(toastTimer);
+  toast.classList.add('show');
+  toastTimer=setTimeout(()=>toast.classList.remove('show'),2500);
+}
+
+/* ═══════════════════════════════════════════════════
+   ЗАСТАВКА / FULLSCREEN
+═══════════════════════════════════════════════════ */
+let menuOpened=false;
+function openMenu() {
+  document.getElementById('splash').classList.add('hidden');
+  // Firebase уже инициализирован при загрузке страницы
+  setTimeout(function() {
+    const savedNick = localStorage.getItem('tb_nick');
+    if (savedNick && savedNick.length >= 3) {
+      enterWithNick(savedNick);
+    } else {
+      document.getElementById('auth-screen').classList.add('visible');
+    }
+  }, 600);
+}
+function enterFullscreen(event) {
+  if (event) event.preventDefault();
+  if (menuOpened) return;
+  menuOpened=true;
+  const el=document.documentElement;
+  const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+  const already=document.fullscreenElement||document.webkitFullscreenElement||document.mozFullScreenElement||document.msFullscreenElement;
+  if (req&&!already) {
+    const p=req.call(el);
+    if (p&&typeof p.then==='function') p.then(openMenu).catch(openMenu);
+    else setTimeout(openMenu,200);
+  } else openMenu();
+}
+
+/* ═══════════════════════════════════════════════════
+   НАВИГАЦИЯ
+═══════════════════════════════════════════════════ */
+function openModeScreen(event) {
+  if (event) event.preventDefault();
+  document.getElementById('menu').classList.remove('visible');
+  document.getElementById('mode-screen').classList.add('visible');
+}
+function closeModeScreen(event) {
+  if (event) event.preventDefault();
+  document.getElementById('mode-screen').classList.remove('visible');
+  document.getElementById('menu').classList.add('visible');
+}
+function openInventoryScreen(event) {
+  if (event) event.preventDefault();
+  renderInventory();
+  document.getElementById('menu').classList.remove('visible');
+  document.getElementById('inventory-screen').classList.add('visible');
+}
+function openShopScreen(event) {
+  if (event) event.preventDefault();
+  renderShop();
+  document.getElementById('menu').classList.remove('visible');
+  document.getElementById('shop-screen').classList.add('visible');
+}
+function closeSecondary(id, event) {
+  if (event) event.preventDefault();
+  document.getElementById(id).classList.remove('visible');
+  document.getElementById('menu').classList.add('visible');
+}
+
+/* ═══════════════════════════════════════════════════
+   ИНВЕНТАРЬ
+═══════════════════════════════════════════════════ */
+const TOTAL_SLOTS=6;
+function renderInventory() {
+  const grid=document.getElementById('inv-grid');
+  grid.innerHTML='';
+  for (let i=0;i<TOTAL_SLOTS;i++) {
+    const tankId=ownedTanks[i];
+    const slot=document.createElement('div');
+    if (tankId) {
+      const td=TANK_DATA[tankId];
+      slot.className='inv-slot filled';
+      const bc=i===0?'var(--accent)':'rgba(72,187,120,.85)';
+      const bt=i===0?'Активен':'Есть';
+      slot.innerHTML=`<div class="inv-slot-icon">${td.icon}</div><div class="inv-slot-name">${td.name}</div><div class="inv-slot-badge" style="background:${bc}">${bt}</div>`;
+    } else {
+      slot.className='inv-slot empty';
+      slot.innerHTML=`<div class="inv-slot-icon" style="opacity:.2;font-size:1.4rem">🔒</div><div class="inv-slot-empty-lbl">Свободно</div>`;
+    }
+    grid.appendChild(slot);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   МАГАЗИН
+═══════════════════════════════════════════════════ */
+function renderShop() {
+  const scroll=document.getElementById('shop-scroll');
+  scroll.innerHTML='';
+  Object.keys(TANK_DATA).forEach(id=>{
+    const td=TANK_DATA[id], owned=ownedTanks.includes(id);
+    const card=document.createElement('div');
+    card.className='shop-tank-card';
+    let badge='';
+    if (owned)          badge=`<div class="stc-badge" style="color:#48bb78;background:rgba(72,187,120,.12)">Есть</div>`;
+    else if (!td.price) badge=`<div class="stc-badge">Базовый</div>`;
+    else                badge=`<div class="stc-price">🪙 ${td.price}</div>`;
+    card.innerHTML=`<div class="stc-icon">${td.icon}</div><div class="stc-name">${td.name}</div>${badge}`;
+    card.addEventListener('touchend',e=>{e.preventDefault();openTankModal(id);});
+    card.addEventListener('click',()=>openTankModal(id));
+    scroll.appendChild(card);
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   МОДАЛКА
+═══════════════════════════════════════════════════ */
+function openTankModal(tankId) {
+  const td=TANK_DATA[tankId], owned=ownedTanks.includes(tankId);
+  document.getElementById('modal-icon').textContent=td.icon;
+  document.getElementById('modal-name').textContent=td.name;
+  document.getElementById('modal-stats').innerHTML=td.stats.map(s=>`<div class="modal-stat-row"><span class="modal-stat-key">${s.key}</span><span class="modal-stat-val">${s.val}</span></div>`).join('');
+  const footer=document.getElementById('modal-footer');
+  if (owned||td.price===null) {
+    footer.innerHTML=`<div class="modal-owned-msg">✅ ${owned?'Уже в инвентаре':'Базовый танк — всегда доступен'}</div>`;
+  } else {
+    const canBuy=playerCurrency>=td.price;
+    footer.innerHTML=`<div class="modal-price-row">Цена: <span class="modal-price-val">🪙 ${td.price}</span></div>
+      <button class="btn-buy" ${canBuy?'':'disabled'} ontouchend="buyTank(event,'${tankId}')" onclick="buyTank(event,'${tankId}')">
+        ${canBuy?'⚡ Купить':'🔒 Недостаточно слитков'}
+      </button>`;
+  }
+  document.getElementById('tank-modal').classList.add('visible');
+}
+function closeTankModal(event) {
+  if (event) event.preventDefault();
+  document.getElementById('tank-modal').classList.remove('visible');
+}
+document.getElementById('tank-modal').addEventListener('click',function(e){ if(e.target===this)closeTankModal(e); });
+
+/* ═══════════════════════════════════════════════════
+   ПОКУПКА
+═══════════════════════════════════════════════════ */
+function buyTank(event,tankId) {
+  if (event) event.preventDefault();
+  const td=TANK_DATA[tankId];
+  if (!td||ownedTanks.includes(tankId)) return;
+  if (playerCurrency<td.price) { showToast(null,'poor'); return; }
+  playerCurrency-=td.price;
+  ownedTanks.push(tankId);
+  refreshCurrency();
+  // Сохраняем инвентарь в Firebase
+  if (window.fbDb&&myPlayerId) {
+    window.fbDb.ref('players/'+myPlayerId+'/tanks').set(ownedTanks.join(','));
+  }
+  closeTankModal();
+  renderShop();
+  showToast(null,'buy',`${td.name} добавлен в инвентарь!`);
+}
+
+/* ═══════════════════════════════════════════════════
+   FIREBASE — ИНИЦИАЛИЗАЦИЯ
+═══════════════════════════════════════════════════ */
+window.fbReady = false;
+window.fbDb    = null;
+window.fbAuth  = null;
+
+function initFirebase() {
+  try {
+    var config = {
+      apiKey:            "AIzaSyD99_oLT-0s6u5Rdv4cqHTNBjdzbQv3DEc",
+      authDomain:        "tankiblitzers.firebaseapp.com",
+      databaseURL:       "https://tankiblitzers-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId:         "tankiblitzers",
+      storageBucket:     "tankiblitzers.firebasestorage.app",
+      messagingSenderId: "433060529250",
+      appId:             "1:433060529250:web:a37e7196d6183f2fc77d3b"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(config);
+    window.fbDb   = firebase.database();
+    window.fbAuth = firebase.auth();
+
+    // Статус соединения — обновляем mp-status и логируем в консоль
+    window.fbDb.ref('.info/connected').on('value', function(snap) {
+      window.fbReady = !!snap.val();
+      console.log('[Firebase] connected =', window.fbReady);
+      var el = document.getElementById('mp-status');
+      if (el) el.textContent = window.fbReady ? '🟢 Онлайн' : '🔴 Офлайн';
+      // Если игрок уже вошёл и переподключился — обновляем присутствие
+      if (window.fbReady && myPlayerId) {
+        window.fbDb.ref('players/' + myPlayerId + '/online').set(true);
+        window.fbDb.ref('players/' + myPlayerId + '/lastSeen').set(Date.now());
+      }
+    });
+
+    console.log('[Firebase] init OK, DB URL:', config.databaseURL);
+  } catch(e) {
+    console.warn('Firebase init error:', e.message);
+    var el = document.getElementById('mp-status');
+    if (el) el.textContent = '❌ Ошибка';
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   ВХОД ПО НИКУ — без регистрации, онлайн через анонимный Firebase
+═══════════════════════════════════════════════════ */
+function doEnterGame(event) {
+  if (event) event.preventDefault();
+  const nick = document.getElementById('auth-nick').value.trim();
+  if (!nick || nick.length < 3) {
+    document.getElementById('auth-error').textContent = 'Ник — минимум 3 символа';
+    return;
+  }
+  document.getElementById('auth-error').textContent = '';
+  document.getElementById('btn-login').disabled = true;
+  localStorage.setItem('tb_nick', nick);
+  enterWithNick(nick);
+}
+
+function enterWithNick(nick) {
+  playerNick = nick;
+
+  // Показываем меню СРАЗУ
+  document.getElementById('auth-screen').classList.remove('visible');
+  const btnLogin = document.getElementById('btn-login');
+  if (btnLogin) btnLogin.disabled = false;
+  document.getElementById('user-badge-name').textContent = nick;
+  document.getElementById('mp-my-id').textContent        = nick;
+  document.getElementById('menu').classList.add('visible');
+
+  // Генерируем / берём локальный ID — не зависим от Auth
+  if (!myPlayerId) {
+    myPlayerId = localStorage.getItem('tb_uid');
+    if (!myPlayerId) {
+      myPlayerId = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+      localStorage.setItem('tb_uid', myPlayerId);
+    }
+  }
+  currentUser = { uid: myPlayerId, nick };
+  refreshCurrency();
+
+  // Загружаем данные из Firebase (работает без Auth при открытых правилах)
+  function syncWithFirebase() {
+    if (!window.fbDb) {
+      // БД ещё не готова — ждём немного и повторяем
+      setTimeout(syncWithFirebase, 500);
+      return;
+    }
+    window.fbDb.ref('players/' + myPlayerId).once('value', function(snap) {
+      const data = snap.val();
+      if (data) {
+        playerCurrency = data.ingots || 0;
+        if (data.tanks) ownedTanks = data.tanks.split(',').filter(Boolean);
+      }
+      window.fbDb.ref('players/' + myPlayerId).update({
+        id: myPlayerId, name: nick,
+        ingots: playerCurrency,
+        tanks:  ownedTanks.join(','),
+        lastSeen: Date.now(), online: true
+      });
+      refreshCurrency();
+      setupPresence();
+    });
+    listenBattleRequests();
+  }
+
+  // Пробуем анонимный Auth для полного доступа, но не блокируем если не работает
+  if (window.fbAuth) {
+    if (window.fbAuth.currentUser) {
+      myPlayerId  = window.fbAuth.currentUser.uid;
+      currentUser = { uid: myPlayerId, nick };
+      localStorage.setItem('tb_uid', myPlayerId);
+      syncWithFirebase();
+    } else {
+      window.fbAuth.signInAnonymously()
+        .then(function(result) {
+          myPlayerId  = result.user.uid;
+          currentUser = { uid: myPlayerId, nick };
+          localStorage.setItem('tb_uid', myPlayerId);
+          syncWithFirebase();
+        })
+        .catch(function() {
+          // Auth не работает — используем локальный ID, Firebase DB всё равно работает
+          syncWithFirebase();
+        });
+    }
+  } else {
+    syncWithFirebase();
+  }
+}
+
+/* ─── Профиль — смена ника ─── */
+function openProfileScreen(event) {
+  if (event) event.preventDefault();
+  document.getElementById('profile-current-nick').textContent = 'Текущий ник: ' + (playerNick || '—');
+  document.getElementById('profile-nick-input').value = playerNick || '';
+  document.getElementById('profile-nick-error').textContent = '';
+  document.getElementById('menu').classList.remove('visible');
+  document.getElementById('profile-screen').classList.add('visible');
+}
+
+function doChangeNick(event) {
+  if (event) event.preventDefault();
+  const nick = document.getElementById('profile-nick-input').value.trim();
+  if (!nick || nick.length < 3) {
+    document.getElementById('profile-nick-error').textContent = 'Ник — минимум 3 символа';
+    return;
+  }
+  playerNick = nick;
+  currentUser = { uid: myPlayerId, nick };
+  localStorage.setItem('tb_nick', nick);
+  document.getElementById('user-badge-name').textContent = nick;
+  document.getElementById('mp-my-id').textContent        = nick;
+  if (window.fbDb && myPlayerId) {
+    window.fbDb.ref('players/' + myPlayerId + '/name').set(nick);
+  }
+  document.getElementById('profile-current-nick').textContent = 'Текущий ник: ' + nick;
+  showToast(null, 'buy', 'Ник изменён: ' + nick);
+}
+
+/* ─── Онлайн-присутствие ─── */
+function setupPresence() {
+  if (!window.fbDb || !myPlayerId) return;
+  const presRef     = window.fbDb.ref('players/' + myPlayerId + '/online');
+  const lastSeenRef = window.fbDb.ref('players/' + myPlayerId + '/lastSeen');
+  presRef.set(true);
+  lastSeenRef.set(Date.now());
+  presRef.onDisconnect().set(false);
+  lastSeenRef.onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+  window._presInterval = setInterval(function() {
+    presRef.set(true);
+    lastSeenRef.set(Date.now());
+  }, 30000);
+}
+function leavePresence() {
+  if (window._presInterval) clearInterval(window._presInterval);
+  if (window.fbDb && myPlayerId) {
+    window.fbDb.ref('players/' + myPlayerId + '/online').set(false);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   ЭКРАН МУЛЬТИПЛЕЕРА
+═══════════════════════════════════════════════════ */
+let playersListRef=null;
+function openMpScreen(event) {
+  if (event) event.preventDefault();
+  document.getElementById('mode-screen').classList.remove('visible');
+  document.getElementById('mp-screen').classList.add('visible');
+  // Обновляем статус при открытии экрана
+  var el = document.getElementById('mp-status');
+  if (el) el.textContent = window.fbReady ? '🟢 Онлайн' : '🔴 Офлайн';
+  loadPlayersList();
+}
+function closeMpScreen(event) {
+  if (event) event.preventDefault();
+  if (playersListRef) { playersListRef.off(); playersListRef=null; }
+  document.getElementById('mp-screen').classList.remove('visible');
+  document.getElementById('mode-screen').classList.add('visible');
+}
+
+function loadPlayersList() {
+  const list=document.getElementById('mp-players-list');
+  if (!list) return;
+  if (!window.fbReady||!window.fbDb) {
+    list.innerHTML='<div class="mp-empty-msg">🔴 Нет подключения</div>';
+    return;
+  }
+  list.innerHTML='<div class="mp-empty-msg">⏳ Загрузка...</div>';
+  if (playersListRef) playersListRef.off();
+  playersListRef=window.fbDb.ref('players');
+  playersListRef.on('value',function(snap){
+    const data=snap.val();
+    list.innerHTML='';
+    if (!data) { list.innerHTML='<div class="mp-empty-msg">Никого нет онлайн</div>'; return; }
+    const now=Date.now();
+    let count=0;
+    Object.values(data).forEach(function(p){
+      if (p.id===myPlayerId) return; // не показываем себя
+      if (!p.online && (now-(p.lastSeen||0)>120000)) return; // офлайн >2 мин
+      const item=document.createElement('div');
+      item.className='mp-player-item';
+      const displayName=p.name||('ID_'+((p.id||'').slice(-5).toUpperCase()));
+      item.innerHTML=`<span class="mp-player-name">🎮 ${displayName}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span class="mp-player-ingots">🪙 ${p.ingots||0}</span>
+          <span class="mp-player-btn">Вызов</span>
+        </span>`;
+      item.addEventListener('touchend',function(e){e.preventDefault();sendBattleRequest(p.id,displayName);});
+      item.addEventListener('click',function(){sendBattleRequest(p.id,displayName);});
+      list.appendChild(item);
+      count++;
+    });
+    if (count===0) list.innerHTML='<div class="mp-empty-msg">Других игроков нет онлайн</div>';
+  });
+}
+
+/* ═══════════════════════════════════════════════════
+   МАТЧМЕЙКИНГ
+═══════════════════════════════════════════════════ */
+let mmTimerInterval=null;
+let mmTimeout=null;
+let mmQueueRef=null;
+let mmSecondsLeft=20;
+let isMatchmaking=false;
+
+function startMatchmaking(event) {
+  if (event) event.preventDefault();
+  if (!window.fbReady) { showToast(null,'error','Нет подключения к серверу'); return; }
+  isMatchmaking=true;
+  mmSecondsLeft=20;
+  document.getElementById('mm-timer').textContent='20';
+  document.getElementById('mm-status').textContent='Ищем игрока в сети...';
+  document.getElementById('matchmaking-overlay').classList.add('visible');
+
+  // Добавляем себя в очередь матчмейкинга
+  const myName = playerNick || ('Игрок_' + (myPlayerId||'').slice(-4).toUpperCase());
+  window.fbDb.ref('matchmaking/'+myPlayerId).set({
+    id:       myPlayerId,
+    name:     myName,
+    ingots:   playerCurrency,
+    joined:   Date.now()
+  });
+
+  // Таймер обратного отсчёта
+  mmTimerInterval=setInterval(function(){
+    mmSecondsLeft--;
+    document.getElementById('mm-timer').textContent=mmSecondsLeft;
+    if (mmSecondsLeft<=0) {
+      clearInterval(mmTimerInterval);
+      onMatchmakingTimeout();
+    }
+  },1000);
+
+  // Ищем другого игрока в очереди
+  mmQueueRef=window.fbDb.ref('matchmaking');
+  mmQueueRef.on('value',function(snap){
+    if (!isMatchmaking) return;
+    const data=snap.val();
+    if (!data) return;
+    const others=Object.values(data).filter(p=>p.id!==myPlayerId&&(Date.now()-p.joined)<25000);
+    if (others.length>0) {
+      const opponent=others[0];
+      // Создаём сессию
+      const sessionId=[myPlayerId,opponent.id].sort().join('_');
+      window.fbDb.ref('sessions/'+sessionId).set({
+        player1: myPlayerId,
+        player2: opponent.id,
+        started: Date.now(),
+        status: 'starting'
+      });
+      document.getElementById('mm-status').textContent='Соперник найден! Загрузка...';
+      document.getElementById('mm-timer').style.display='none';
+      clearInterval(mmTimerInterval);
+      clearTimeout(mmTimeout);
+      // Запускаем бой через 1.5 сек
+      setTimeout(function(){
+        const isHost=myPlayerId<opponent.id;
+        launchOnlineBattle(sessionId, isHost, opponent.name||opponent.id.slice(-6));
+      },1500);
+    }
+  });
+}
+
+function onMatchmakingTimeout() {
+  if (!isMatchmaking) return;
+  document.getElementById('mm-status').textContent='Соперник не найден. Выберите игрока из списка:';
+  document.getElementById('mm-timer').style.display='none';
+  // Показываем список онлайн игроков в оверлее
+  // Таймаут — просто информируем; оверлей остаётся
+  isMatchmaking=false;
+  clearMatchmakingQueue();
+}
+
+function cancelMatchmaking(event) {
+  if (event) event.preventDefault();
+  isMatchmaking=false;
+  clearInterval(mmTimerInterval);
+  clearTimeout(mmTimeout);
+  if (mmQueueRef) { mmQueueRef.off(); mmQueueRef=null; }
+  clearMatchmakingQueue();
+  document.getElementById('mm-timer').style.display='';
+  document.getElementById('matchmaking-overlay').classList.remove('visible');
+}
+
+function clearMatchmakingQueue() {
+  if (window.fbDb&&myPlayerId) {
+    window.fbDb.ref('matchmaking/'+myPlayerId).remove();
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   ПРЯМЫЕ ЗАПРОСЫ НА БОЙ
+═══════════════════════════════════════════════════ */
+let pendingRequestFrom=null;
+let battleRequestRef=null;
+
+function listenBattleRequests() {
+  if (!window.fbDb||!myPlayerId) return;
+  battleRequestRef=window.fbDb.ref('requests/'+myPlayerId);
+  battleRequestRef.on('value',function(snap){
+    const req=snap.val();
+    if (!req) return;
+    // Показываем запрос
+    pendingRequestFrom=req;
+    document.getElementById('br-from-text').textContent='Игрок '+req.fromName+' вызывает вас на бой!';
+    document.getElementById('battle-request').classList.add('visible');
+    // Удаляем запрос из БД
+    snap.ref.remove();
+  });
+}
+
+function sendBattleRequest(targetId, targetName) {
+  if (!window.fbReady) { showToast(null,'error','Нет подключения'); return; }
+  const myName = playerNick || ('Игрок_' + (myPlayerId||'').slice(-4).toUpperCase());
+  window.fbDb.ref('requests/'+targetId).set({
+    from:      myPlayerId,
+    fromName:  myName,
+    timestamp: Date.now()
+  });
+  showToast(null,'info','Запрос отправлен игроку '+targetName);
+}
+
+function acceptBattleRequest(event) {
+  if (event) event.preventDefault();
+  document.getElementById('battle-request').classList.remove('visible');
+  if (!pendingRequestFrom) return;
+  const opponentId=pendingRequestFrom.from;
+  const opponentName=pendingRequestFrom.fromName||opponentId.slice(-6);
+  const sessionId=[myPlayerId,opponentId].sort().join('_');
+  window.fbDb.ref('sessions/'+sessionId).set({
+    player1: sessionId.split('_')[0],
+    player2: sessionId.split('_')[1],
+    started: Date.now(),
+    status: 'starting'
+  });
+  // Уведомляем инициатора через сессию
+  setTimeout(function(){
+    const isHost=myPlayerId<opponentId;
+    launchOnlineBattle(sessionId, isHost, opponentName);
+  },500);
+  pendingRequestFrom=null;
+}
+
+function declineBattleRequest(event) {
+  if (event) event.preventDefault();
+  document.getElementById('battle-request').classList.remove('visible');
+  pendingRequestFrom=null;
+}
+
+/* ═══════════════════════════════════════════════════
+   ОНЛАЙН БОЙ — ЗАПУСК И СИНХРОНИЗАЦИЯ
+═══════════════════════════════════════════════════ */
+let onlineMode=false;
+let sessionId=null;
+let isHost=false;
+let sessionRef=null;
+let opponentRef=null;
+let myStateRef=null;
+let syncInterval=null;
+let opponentState={x:0,y:0,angle:0,hp:0,alive:true};
+
+function launchOnlineBattle(sid, host, opponentName) {
+  // Закрываем все оверлеи
+  document.getElementById('matchmaking-overlay').classList.remove('visible');
+  document.getElementById('mp-screen').classList.remove('visible');
+  if (mmQueueRef) { mmQueueRef.off(); mmQueueRef=null; }
+  clearMatchmakingQueue();
+
+  onlineMode=true;
+  sessionId=sid;
+  isHost=host;
+
+  // Запускаем геймплей
+  startGameScreen(opponentName, true);
+}
+
+// Отправляем своё состояние в Firebase
+function syncMyState() {
+  if (!onlineMode||!window.fbDb||!sessionId) return;
+  const myKey=isHost?'host':'guest';
+  window.fbDb.ref('sessions/'+sessionId+'/'+myKey).set({
+    x:     Math.round(player.x),
+    y:     Math.round(player.y),
+    angle: +player.angle.toFixed(3),
+    hp:    player.hp,
+    alive: player.alive,
+    ts:    Date.now()
+  });
+}
+
+// Слушаем состояние соперника
+function listenOpponentState() {
+  if (!window.fbDb||!sessionId) return;
+  const oppKey=isHost?'guest':'host';
+  opponentRef=window.fbDb.ref('sessions/'+sessionId+'/'+oppKey);
+  opponentRef.on('value',function(snap){
+    const d=snap.val();
+    if (!d) return;
+    opponentState.x=d.x||opponentState.x;
+    opponentState.y=d.y||opponentState.y;
+    opponentState.angle=d.angle||0;
+    opponentState.hp=d.hp!=null?d.hp:opponentState.hp;
+    opponentState.alive=d.alive!=null?d.alive:true;
+    // Обновляем HP соперника в HUD
+    const eh=Math.max(0,opponentState.hp);
+    const maxHp=SHELLY_STATS.maxHp;
+    document.getElementById('enemy-hp-bar').style.width=(eh/maxHp*100)+'%';
+    document.getElementById('enemy-hp-text').textContent=eh+' / '+maxHp;
+    // Проверяем победу/поражение
+    if (onlineMode&&gameRunning) {
+      if (!opponentState.alive&&player.alive) { endOnlineGame('win'); }
+    }
+  });
+
+  // Слушаем пули соперника
+  window.fbDb.ref('sessions/'+sessionId+'/bullets_'+(isHost?'guest':'host')).on('value',function(snap){
+    const remoteBullets=snap.val();
+    if (!remoteBullets||!gameRunning||!onlineMode) return;
+    // Создаём копии пуль соперника в локальном массиве (только новые)
+    Object.values(remoteBullets).forEach(function(rb){
+      const age=Date.now()-rb.ts;
+      if (age>2000) return; // старые пули игнорируем
+      // Проверяем попадание в нашего игрока
+      if (player.alive) {
+        const dist=Math.hypot(rb.x-player.x,rb.y-player.y);
+        if (dist<BULLET_RADIUS+SHELLY_STATS.size) {
+          player.hp-=SHELLY_STATS.damage;
+          updateHUD();
+          if (player.hp<=0) { player.alive=false; syncMyState(); endOnlineGame('lose'); }
+        }
+      }
+    });
+  });
+}
+
+function pushMyBullet(bx,by,angle) {
+  if (!onlineMode||!window.fbDb||!sessionId) return;
+  const myBulletsRef=window.fbDb.ref('sessions/'+sessionId+'/bullets_'+(isHost?'host':'guest'));
+  const key='b_'+Date.now();
+  myBulletsRef.child(key).set({x:Math.round(bx),y:Math.round(by),angle:+angle.toFixed(3),ts:Date.now()});
+  // Удаляем пулю через 3 сек
+  setTimeout(function(){myBulletsRef.child(key).remove();},3000);
+}
+
+function cleanupOnlineSession() {
+  onlineMode=false;
+  if (opponentRef) { opponentRef.off(); opponentRef=null; }
+  if (syncInterval) { clearInterval(syncInterval); syncInterval=null; }
+  if (sessionRef) { sessionRef.off(); sessionRef=null; }
+  // Чистим сессию
+  if (window.fbDb&&sessionId) {
+    window.fbDb.ref('sessions/'+sessionId).remove();
+    sessionId=null;
+  }
+}
+
+function endOnlineGame(result) {
+  if (!gameRunning) return;
+  gameRunning=false;
+  cancelAnimationFrame(gameLoopId);
+  cleanupOnlineSession();
+  const award=result==='win'?10:0;
+  if (award>0) { playerCurrency+=award; refreshCurrency(); }
+  const title=document.getElementById('game-over-title');
+  if (result==='win') { title.textContent='🏆 ПОБЕДА'; title.className='game-over-title win'; document.getElementById('game-over-sub').textContent='Враг уничтожен'+(award?` • +${award} 🪙 слитков`:''); }
+  else { title.textContent='💥 УНИЧТОЖЕН'; title.className='game-over-title lose'; document.getElementById('game-over-sub').textContent='Вы уничтожены'; }
+  document.getElementById('game-over').classList.add('show');
+}
+
+/* ═══════════════════════════════════════════════════
+   ГЕЙМПЛЕЙ — ОБЩИЙ ЗАПУСК
+═══════════════════════════════════════════════════ */
+const SHELLY_STATS={maxHp:400,damage:60,speed:165,reloadTime:2000,size:26,color:'#f4a01c',bulletColor:'#ffd05a'};
+const BOT_STATS   ={maxHp:400,damage:40,speed:72, reloadTime:2500,size:26,color:'#e53e3e',bulletColor:'#fc8181'};
+const BULLET_SPEED=340, BULLET_RADIUS=6;
+let gameRunning=false, gameLoopId=null, lastTimestamp=0;
+let player={}, enemy={}, bullets=[], obstacles=[];
+const joy={active:false,startX:0,startY:0,dx:0,dy:0,touchId:null};
+let firePressed=false;
+let canvas,ctx,CW,CH;
+let aiStrafeTimer=0, aiStrafeDir=1;
+
+const OBS_DEFS=[
+  {rx:.42,ry:.33,rw:.16,rh:.34},
+  {rx:.18,ry:.15,rw:.11,rh:.21},
+  {rx:.18,ry:.64,rw:.11,rh:.21},
+  {rx:.71,ry:.15,rw:.11,rh:.21},
+  {rx:.71,ry:.64,rw:.11,rh:.21},
+];
+function buildObstacles() { obstacles=OBS_DEFS.map(d=>({x:d.rx*CW,y:d.ry*CH,w:d.rw*CW,h:d.rh*CH})); }
+
+function circleInRect(cx,cy,r,o) { return cx+r>o.x&&cx-r<o.x+o.w&&cy+r>o.y&&cy-r<o.y+o.h; }
+function segIntersectsRect(ax,ay,bx,by,o) {
+  const sides=[[o.x,o.y,o.x+o.w,o.y],[o.x+o.w,o.y,o.x+o.w,o.y+o.h],[o.x,o.y+o.h,o.x+o.w,o.y+o.h],[o.x,o.y,o.x,o.y+o.h]];
+  for (const [cx,cy,dx,dy] of sides) if (segSeg(ax,ay,bx,by,cx,cy,dx,dy)) return true;
+  return false;
+}
+function segSeg(ax,ay,bx,by,cx,cy,dx,dy) {
+  const d=(bx-ax)*(dy-cy)-(by-ay)*(dx-cx);
+  if (Math.abs(d)<1e-9) return false;
+  const t=((cx-ax)*(dy-cy)-(cy-ay)*(dx-cx))/d;
+  const u=((cx-ax)*(by-ay)-(cy-ay)*(bx-ax))/d;
+  return t>=0&&t<=1&&u>=0&&u<=1;
+}
+function lineOfSight(ax,ay,bx,by) { for (const o of obstacles) if (segIntersectsRect(ax,ay,bx,by,o)) return false; return true; }
+
+function startGameScreen(opponentName, isOnline) {
+  document.getElementById('mode-screen').classList.remove('visible');
+  const gs=document.getElementById('game-screen');
+  gs.style.display='block';
+  canvas=document.getElementById('game-canvas');
+  canvas.width=gs.offsetWidth||window.innerWidth;
+  canvas.height=gs.offsetHeight||window.innerHeight;
+  CW=canvas.width; CH=canvas.height;
+  ctx=canvas.getContext('2d');
+  buildObstacles();
+
+  // Позиции зависят от роли в онлайн-игре
+  if (isOnline) {
+    const startX=isHost?CW*.12:CW*.88;
+    const startAngle=isHost?0:Math.PI;
+    player={x:startX,y:CH/2,angle:startAngle,hp:SHELLY_STATS.maxHp,reloadTimer:0,alive:true};
+    opponentState={x:isHost?CW*.88:CW*.12,y:CH/2,angle:isHost?Math.PI:0,hp:SHELLY_STATS.maxHp,alive:true};
+    document.getElementById('hud-mode-label').textContent='ОНЛАЙН';
+    document.getElementById('enemy-hud-name').textContent=(opponentName||'СОПЕРНИК').slice(0,10).toUpperCase();
+  } else {
+    player={x:CW*.12,y:CH/2,angle:0,hp:SHELLY_STATS.maxHp,reloadTimer:0,alive:true};
+    enemy ={x:CW*.88,y:CH/2,angle:Math.PI,hp:BOT_STATS.maxHp,reloadTimer:1200,alive:true};
+    document.getElementById('hud-mode-label').textContent='ИИ';
+    document.getElementById('enemy-hud-name').textContent='ENEMY';
+  }
+  bullets=[];
+  aiStrafeTimer=0; aiStrafeDir=1;
+  document.getElementById('game-over').classList.remove('show');
+  document.getElementById('player-hud-name').textContent='SHELLY';
+  updateHUD();
+  initJoystick();
+  gameRunning=true;
+  lastTimestamp=performance.now();
+  gameLoopId=requestAnimationFrame(gameLoop);
+
+  if (isOnline) {
+    // Начинаем синхронизацию
+    syncMyState();
+    listenOpponentState();
+    syncInterval=setInterval(syncMyState,100); // 10 раз в сек
+  }
+}
+
+function startVsAI(event) {
+  if (event) event.preventDefault();
+  onlineMode=false;
+  startGameScreen('ENEMY',false);
+}
+
+/* ── Игровой цикл ── */
+function gameLoop(ts) {
+  if (!gameRunning) return;
+  const dt=Math.min((ts-lastTimestamp)/1000,0.05);
+  lastTimestamp=ts;
+  update(dt);
+  render();
+  gameLoopId=requestAnimationFrame(gameLoop);
+}
+
+function update(dt) {
+  const S=SHELLY_STATS, B=BOT_STATS;
+
+  /* Движение игрока */
+  if (player.alive&&(joy.dx||joy.dy)) {
+    const len=Math.hypot(joy.dx,joy.dy);
+    const nx=joy.dx/len, ny=joy.dy/len;
+    player.angle=Math.atan2(ny,nx);
+    const r=S.size*.88;
+    const nx2=clamp(player.x+nx*S.speed*dt,S.size,CW-S.size);
+    let okX=true; for (const o of obstacles) if (circleInRect(nx2,player.y,r,o)){okX=false;break;}
+    if (okX) player.x=nx2;
+    const ny2=clamp(player.y+ny*S.speed*dt,S.size,CH-S.size);
+    let okY=true; for (const o of obstacles) if (circleInRect(player.x,ny2,r,o)){okY=false;break;}
+    if (okY) player.y=ny2;
+  }
+
+  /* Перезарядка игрока */
+  if (player.reloadTimer>0){player.reloadTimer-=dt*1000;if(player.reloadTimer<0)player.reloadTimer=0;}
+  if (firePressed&&player.alive&&player.reloadTimer===0) {
+    if (onlineMode) {
+      // В онлайн-режиме: спавним локальную пулю и отправляем координаты в Firebase
+      spawnBullet(player.x,player.y,player.angle,'player',S.bulletColor,1);
+      pushMyBullet(player.x+Math.cos(player.angle)*36,player.y+Math.sin(player.angle)*36,player.angle);
+    } else {
+      spawnBullet(player.x,player.y,player.angle,'player',S.bulletColor,1);
+    }
+    player.reloadTimer=S.reloadTime;
+  }
+  document.getElementById('btn-fire').classList.toggle('cooldown',player.reloadTimer>0);
+
+  if (!onlineMode) {
+    /* ИИ */
+    if (enemy.alive&&player.alive) {
+      const dx=player.x-enemy.x, dy=player.y-enemy.y;
+      const dist=Math.hypot(dx,dy);
+      const toPlayer=Math.atan2(dy,dx);
+      enemy.angle=toPlayer;
+      const hasSight=lineOfSight(enemy.x,enemy.y,player.x,player.y);
+      const r=B.size*.88;
+      if (!hasSight) {
+        const candidates=[-Math.PI/5,Math.PI/5,-Math.PI*2/5,Math.PI*2/5,-Math.PI*3/5,Math.PI*3/5,-Math.PI*4/5,Math.PI*4/5,Math.PI];
+        let moved=false;
+        for (const da of candidates) {
+          const a=toPlayer+da;
+          const tx=clamp(enemy.x+Math.cos(a)*B.speed*dt,B.size,CW-B.size);
+          const ty=clamp(enemy.y+Math.sin(a)*B.speed*dt,B.size,CH-B.size);
+          let ok=true; for (const o of obstacles) if (circleInRect(tx,ty,r,o)){ok=false;break;}
+          if (ok){enemy.x=tx;enemy.y=ty;enemy.angle=a;moved=true;break;}
+        }
+        if (!moved){
+          const tx=clamp(enemy.x+(dx/dist)*B.speed*dt,B.size,CW-B.size);
+          const ty=clamp(enemy.y+(dy/dist)*B.speed*dt,B.size,CH-B.size);
+          enemy.x=tx;enemy.y=ty;
+        }
+      } else {
+        aiStrafeTimer-=dt;
+        if (aiStrafeTimer<=0){aiStrafeDir=Math.random()<.5?1:-1;aiStrafeTimer=1.0+Math.random()*.8;}
+        const perp=toPlayer+Math.PI/2*aiStrafeDir;
+        let mvX=0,mvY=0;
+        if (dist>175){mvX+=(dx/dist)*B.speed;mvY+=(dy/dist)*B.speed;}
+        else if (dist<105){mvX-=(dx/dist)*B.speed*.6;mvY-=(dy/dist)*B.speed*.6;}
+        mvX+=Math.cos(perp)*B.speed*.55; mvY+=Math.sin(perp)*B.speed*.55;
+        const tx=clamp(enemy.x+mvX*dt,B.size,CW-B.size);
+        const ty=clamp(enemy.y+mvY*dt,B.size,CH-B.size);
+        let ok=true; for (const o of obstacles) if (circleInRect(tx,ty,r,o)){ok=false;break;}
+        if (ok){enemy.x=tx;enemy.y=ty;}
+      }
+      if (enemy.reloadTimer>0) enemy.reloadTimer-=dt*1000;
+      else if (hasSight) { spawnBullet(enemy.x,enemy.y,enemy.angle,'enemy',B.bulletColor,1); enemy.reloadTimer=B.reloadTime; }
+    }
+  }
+
+  /* Пули */
+  for (let i=bullets.length-1;i>=0;i--) {
+    const b=bullets[i],px=b.x,py=b.y;
+    b.x+=Math.cos(b.angle)*BULLET_SPEED*dt;
+    b.y+=Math.sin(b.angle)*BULLET_SPEED*dt;
+    if (b.x<0||b.x>CW||b.y<0||b.y>CH){bullets.splice(i,1);continue;}
+    let wall=false;
+    for (const o of obstacles) if (segIntersectsRect(px,py,b.x,b.y,o)){wall=true;break;}
+    if (wall){bullets.splice(i,1);continue;}
+
+    if (!onlineMode) {
+      // ИИ режим: столкновения с ботом
+      if (b.owner==='player'&&enemy.alive&&dist2(b.x,b.y,enemy.x,enemy.y)<(BULLET_RADIUS+BOT_STATS.size)**2) {
+        enemy.hp-=SHELLY_STATS.damage; bullets.splice(i,1); updateHUD();
+        if (enemy.hp<=0){enemy.alive=false;awardWin();endGame('win');}
+        continue;
+      }
+      if (b.owner==='enemy'&&player.alive&&dist2(b.x,b.y,player.x,player.y)<(BULLET_RADIUS+SHELLY_STATS.size)**2) {
+        player.hp-=BOT_STATS.damage; bullets.splice(i,1); updateHUD();
+        if (player.hp<=0){player.alive=false;endGame('lose');}
+        continue;
+      }
+    } else {
+      // Онлайн: только наши пули летят, попадания считает Firebase-листенер
+    }
+  }
+}
+
+function awardWin() {
+  playerCurrency+=10;
+  document.getElementById('game-over-sub').textContent='Враг уничтожен • +10 🪙 слитков';
+}
+
+/* ── Отрисовка ── */
+function render() {
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,CW,CH);
+  ctx.strokeStyle='rgba(244,160,28,0.04)'; ctx.lineWidth=1;
+  for (let x=0;x<=CW;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,CH);ctx.stroke();}
+  for (let y=0;y<=CH;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(CW,y);ctx.stroke();}
+  for (const o of obstacles) {
+    ctx.fillStyle='rgba(0,0,0,.4)'; ctx.beginPath(); ctx.roundRect(o.x+3,o.y+3,o.w,o.h,5); ctx.fill();
+    ctx.fillStyle='#1a2235'; ctx.strokeStyle='rgba(74,85,104,.65)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(o.x,o.y,o.w,o.h,5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(244,160,28,.08)'; ctx.beginPath(); ctx.roundRect(o.x,o.y,o.w,5,[5,5,0,0]); ctx.fill();
+    ctx.strokeStyle='rgba(74,85,104,.2)'; ctx.lineWidth=1;
+    const step=16;
+    for (let sx=o.x+step;sx<o.x+o.w;sx+=step){ctx.beginPath();ctx.moveTo(sx,o.y);ctx.lineTo(sx,o.y+o.h);ctx.stroke();}
+  }
+  for (const b of bullets) {
+    ctx.beginPath(); ctx.arc(b.x,b.y,BULLET_RADIUS,0,Math.PI*2);
+    ctx.fillStyle=b.color; ctx.shadowColor=b.color; ctx.shadowBlur=10;
+    ctx.fill(); ctx.shadowBlur=0;
+  }
+
+  if (player.alive) drawTank(player.x,player.y,player.angle,SHELLY_STATS.size,SHELLY_STATS.color,'ВЫ');
+
+  if (onlineMode) {
+    // Рисуем соперника по данным из Firebase
+    if (opponentState.alive) drawTank(opponentState.x,opponentState.y,opponentState.angle,SHELLY_STATS.size,'#e53e3e','ВРАГ');
+  } else {
+    if (enemy.alive) drawTank(enemy.x,enemy.y,enemy.angle,BOT_STATS.size,BOT_STATS.color,'ENEMY');
+  }
+}
+
+function drawTank(x,y,angle,r,color,label) {
+  ctx.save(); ctx.translate(x,y); ctx.rotate(angle);
+  const hw=r*.65, hh=r*.5;
+  ctx.fillStyle=color; ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.roundRect(-hw,-hh,hw*2,hh*2,4); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(0,0,0,.4)';
+  ctx.fillRect(-hw,-hh,hw*2,hh*.22);
+  ctx.fillRect(-hw,hh-hh*.22,hw*2,hh*.22);
+  ctx.fillStyle='rgba(255,255,255,.18)';
+  ctx.beginPath(); ctx.arc(0,0,r*.36,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=color;
+  ctx.beginPath(); ctx.roundRect(r*.3,-r*.1,r*.7,r*.2,3); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,.55)';
+  ctx.font=`bold ${Math.round(r*.48)}px "Exo 2",sans-serif`;
+  ctx.textAlign='center';
+  ctx.fillText(label,x,y-r-5);
+}
+
+/* ── Вспомогательные ── */
+function spawnBullet(x,y,angle,owner,color,count) {
+  const spread=count>1?0.15:0;
+  for (let i=0;i<count;i++) {
+    const da=(i-(count-1)/2)*spread;
+    bullets.push({x:x+Math.cos(angle+da)*36, y:y+Math.sin(angle+da)*36, angle:angle+da, owner, color});
+  }
+}
+function clamp(v,mn,mx){return Math.max(mn,Math.min(mx,v));}
+function dist2(ax,ay,bx,by){return (ax-bx)**2+(ay-by)**2;}
+
+function updateHUD() {
+  const ph=Math.max(0,player.hp);
+  document.getElementById('player-hp-bar').style.width=(ph/SHELLY_STATS.maxHp*100)+'%';
+  document.getElementById('player-hp-text').textContent=ph+' / '+SHELLY_STATS.maxHp;
+  if (!onlineMode) {
+    const eh=Math.max(0,enemy.hp);
+    document.getElementById('enemy-hp-bar').style.width=(eh/BOT_STATS.maxHp*100)+'%';
+    document.getElementById('enemy-hp-text').textContent=eh+' / '+BOT_STATS.maxHp;
+  }
+}
+
+function endGame(result) {
+  gameRunning=false; cancelAnimationFrame(gameLoopId);
+  refreshCurrency();
+  const title=document.getElementById('game-over-title');
+  if (result==='win'){title.textContent='🏆 ПОБЕДА';title.className='game-over-title win';}
+  else{title.textContent='💥 УНИЧТОЖЕН';title.className='game-over-title lose';document.getElementById('game-over-sub').textContent='SHELLY уничтожена';}
+  document.getElementById('game-over').classList.add('show');
+}
+
+function exitGame(event) {
+  if (event) event.preventDefault();
+  gameRunning=false; cancelAnimationFrame(gameLoopId);
+  if (onlineMode) cleanupOnlineSession();
+  destroyJoystick();
+  document.getElementById('game-screen').style.display='none';
+  document.getElementById('menu').classList.add('visible');
+  refreshCurrency();
+}
+
+/* ── Джойстик ── */
+function initJoystick() {
+  const z=document.getElementById('joystick-zone');
+  z.addEventListener('touchstart',  onJoyStart,  {passive:false});
+  z.addEventListener('touchmove',   onJoyMove,   {passive:false});
+  z.addEventListener('touchend',    onJoyEnd,    {passive:false});
+  z.addEventListener('touchcancel', onJoyEnd,    {passive:false});
+}
+function destroyJoystick() {
+  const z=document.getElementById('joystick-zone');
+  z.removeEventListener('touchstart',  onJoyStart);
+  z.removeEventListener('touchmove',   onJoyMove);
+  z.removeEventListener('touchend',    onJoyEnd);
+  z.removeEventListener('touchcancel', onJoyEnd);
+  joy.dx=0; joy.dy=0; joy.active=false;
+}
+function onJoyStart(e) {
+  e.preventDefault(); if(joy.active)return;
+  const t=e.changedTouches[0], rect=e.currentTarget.getBoundingClientRect();
+  joy.startX=rect.left+rect.width/2; joy.startY=rect.top+rect.height/2;
+  joy.touchId=t.identifier; joy.active=true; updateJoy(t.clientX,t.clientY);
+}
+function onJoyMove(e){e.preventDefault();for(const t of e.changedTouches)if(t.identifier===joy.touchId)updateJoy(t.clientX,t.clientY);}
+function onJoyEnd(e) {
+  e.preventDefault();
+  for(const t of e.changedTouches)if(t.identifier===joy.touchId){
+    joy.active=false;joy.dx=0;joy.dy=0;
+    document.getElementById('joystick-knob').style.transform='translate(-50%,-50%)';
+  }
+}
+function updateJoy(cx,cy) {
+  let dx=cx-joy.startX, dy=cy-joy.startY;
+  const len=Math.hypot(dx,dy); if(len>40){dx=dx/len*40;dy=dy/len*40;}
+  joy.dx=dx; joy.dy=dy;
+  document.getElementById('joystick-knob').style.transform=`translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px))`;
+}
+
+/* ── Кнопка огня ── */
+function fireButtonDown(e){if(e)e.preventDefault();firePressed=true; document.getElementById('btn-fire').classList.add('active');}
+function fireButtonUp(e)  {if(e)e.preventDefault();firePressed=false;document.getElementById('btn-fire').classList.remove('active');}
+
+/* ── Старт ── */
+document.addEventListener('DOMContentLoaded',function(){
+  // Ждём пока Firebase SDK загрузится, потом инициализируем
+  function tryInitFirebase(attempts) {
+    if (typeof firebase !== 'undefined') {
+      initFirebase();
+    } else if (attempts > 0) {
+      setTimeout(function(){ tryInitFirebase(attempts - 1); }, 200);
+    } else {
+      console.warn('Firebase SDK не загрузился — нет интернета или заблокирован браузером');
+    }
+  }
+  tryInitFirebase(20); // ждём до 4 секунд
+});
+</script>
+</body>
+</html>
